@@ -1,4 +1,4 @@
-use std::{os::unix::fs::MetadataExt, time::Duration};
+use std::{ffi::c_char, os::unix::fs::{FileTypeExt, MetadataExt}, path::Path, time::Duration};
 
 
 pub(crate) fn shell() {
@@ -21,11 +21,13 @@ pub(crate) fn shell() {
             Ok(l) => l,
         };
 
+        rl.add_history_entry(&line).ok();
+
         let parts = line.split(" ").map(|s| s.trim()).collect::<Vec<_>>();
 
         match parts[0] {
             "" => continue,
-            
+
             "lsmod" => lsmod(),
 
             "sh" => sh(),
@@ -63,7 +65,11 @@ fn lsmod() {
 
     let mut i = 0usize;
     for modline in mods.split("\n") {
-        let modname = modline.split(" ").next().unwrap();
+        let modname = modline.split(" ").next().unwrap().trim();
+        if modname.is_empty() {
+            break;
+        }
+
         println!("  {}", modname);
         i += 1;
         if i % 10 == 0 {
@@ -116,5 +122,119 @@ fn sh() {
             println!("Failed to invoke sh: {:?}", e);
         }
         Ok(_) => {},
+    }
+}
+
+pub(crate) fn sh_serial<P: AsRef<Path>>(tty: P) {
+    let tty = tty.as_ref();
+    if let Err(_) = std::fs::write(tty, "Initializing console...\n") {
+        return;
+    }
+
+    std::fs::write(tty, format!("{}\n", crate::TAGLINE)).ok();
+
+    println!("Enabling tty: {:?}", tty);
+
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        println!("fork() failed");
+        return;
+    }
+
+    if pid > 0 {
+        // parent
+        return;
+    }
+
+    // safety: no other thread is running in child
+    unsafe { std::env::set_var("TERM", "vt100") };
+
+    unsafe { libc::setsid() };
+
+    // this becomes the controlling terminal
+    let tty_read = unsafe { libc::open(
+        tty.as_os_str().as_encoded_bytes()
+            .as_ptr() as *const _ as *const c_char,
+            libc::O_RDONLY,
+    ) };
+
+    if tty_read < 0 {
+        unsafe { libc::exit(0) };
+    }
+
+    let tty_write = unsafe { libc::open(
+        tty.as_os_str().as_encoded_bytes()
+            .as_ptr() as *const _ as *const c_char,
+            libc::O_WRONLY,
+    ) };
+
+    if tty_write < 0 {
+        unsafe { libc::exit(0) };
+    }
+
+    if 0 > unsafe { libc::dup2(tty_read, 0) } {
+        unsafe { libc::exit(0) };
+    }
+
+    if 0 > unsafe { libc::dup2(tty_write, 1) } {
+        unsafe { libc::exit(0) };
+    }
+
+    if 0 > unsafe { libc::dup2(tty_write, 2) } {
+        unsafe { libc::exit(0) };
+    }
+
+    let mut fd = tty_write;
+    while fd > 2 {
+        unsafe { libc::close(fd) };
+        fd -= 1;
+    }
+
+    unsafe { libc::execv(
+        b"/bin/sh\0".as_ptr() as *const _ as *const c_char,
+        [b"-sh\0".as_ptr() as *const _ as *const c_char, std::ptr::null()].as_ptr(),
+    ) };
+
+    unsafe { libc::exit(0) };
+}
+
+pub(crate) fn search_serial() {
+    let dir = std::fs::read_dir("/dev");
+    let dir = match dir {
+        Err(e) => {
+            println!("Failed to open /dev ({})", e);
+            return;
+        },
+
+        Ok(d) => d,
+    };
+
+    for ent in dir {
+        let ent = match ent {
+            Err(_) => continue,
+            Ok(e) => e,
+        };
+
+        let ft = match ent.file_type() {
+            Err(_) => continue,
+            Ok(ft) => ft,
+        };
+
+        if !ft.is_char_device() {
+            continue;
+        }
+
+        let filename = ent.file_name();
+        let filename = filename.to_str();
+        if filename.is_none() {
+            continue;
+        }
+
+        let filename = filename.unwrap();
+        if !filename.starts_with("ttyS") {
+            continue;
+        }
+
+        sh_serial(format!("/dev/{}", filename));
     }
 }

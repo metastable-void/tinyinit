@@ -1,6 +1,10 @@
+use std::time::Duration;
+
 
 mod shell;
 mod init;
+
+pub(crate) const TAGLINE: &str = "Welcome to Menhera OS 0.1.0b-dev !";
 
 fn shutdown() -> ! {
     unsafe { libc::sync() };
@@ -16,8 +20,17 @@ fn main() -> ! {
         //shutdown();
     }
 
+    std::thread::spawn(|| {
+        loop {
+            unsafe { libc::wait(std::ptr::null_mut()) };
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    });
+
     println!("We've just booted!");
-    println!("Welcome to Menhera OS 0.1.0b-dev !");
+    println!("{}", TAGLINE);
+
+    shell::search_serial();
 
     shell::shell();
 
