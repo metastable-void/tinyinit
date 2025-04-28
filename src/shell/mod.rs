@@ -26,6 +26,8 @@ pub(crate) fn shell() {
         match parts[0] {
             "lsmod" => lsmod(),
 
+            "sh" => sh(),
+
             "ls" => {
                 if parts.len() < 2 {
                     ls("/");
@@ -38,7 +40,7 @@ pub(crate) fn shell() {
 
             _ => {
                 println!("help:");
-                println!("  lsmod | exit | quit | shutdown | halt");
+                println!("  sh | lsmod | exit | quit | shutdown | halt");
                 println!("  ls <path>");
                 println!("  help | ?");
             }
@@ -102,5 +104,15 @@ fn ls(dir: &str) {
             };
             statfile(path);
         }
+    }
+}
+
+fn sh() {
+    let mut cmd = std::process::Command::new("/bin/sh");
+    match cmd.status() {
+        Err(e) => {
+            println!("Failed to invoke sh: {:?}", e);
+        }
+        Ok(_) => {},
     }
 }

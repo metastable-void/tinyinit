@@ -35,9 +35,11 @@ fn mount(src: &[u8], target: &[u8], fstype: &[u8], flags: u64) -> Result<(), ()>
 
 pub(crate) fn prepare_fs() -> Result<(), ()> {
     mkdir(b"/proc\0", 0o0755).ok();
+    mkdir(b"/sys\0", 0o0755).ok();
     mkdir(b"/dev\0", 0o0755).ok();
     mkdir(b"/tmp\0", 0o1777).ok();
     mount(b"none\0", b"/proc\0", b"proc\0", 0)?;
+    mount(b"none\0", b"/sys\0", b"sysfs\0", 0)?;
     mount(b"none\0", b"/dev\0", b"devtmpfs\0", 0)?;
     mount(b"none\0", b"/tmp\0", b"tmpfs\0", 0)?;
 
