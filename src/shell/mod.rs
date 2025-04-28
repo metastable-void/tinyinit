@@ -24,6 +24,8 @@ pub(crate) fn shell() {
         let parts = line.split(" ").map(|s| s.trim()).collect::<Vec<_>>();
 
         match parts[0] {
+            "" => continue,
+            
             "lsmod" => lsmod(),
 
             "sh" => sh(),
